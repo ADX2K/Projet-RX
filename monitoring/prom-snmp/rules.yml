@@ -1,0 +1,27 @@
+# Règles d'alerte du niveau N1 : seuils fixes sur les compteurs SNMP.
+#
+# irate(...[10m]) = débit entre les deux derniers relevés SNMP, soit une moyenne
+# sur 5 minutes : c'est ce que voit une supervision SNMP classique.
+#
+# L'étiquette « detects » liste les scénarios qu'une règle peut révéler.
+# Le banc de mesure s'en sert pour savoir si une alerte est du bon type.
+
+groups:
+  - name: n1-snmp
+    rules:
+      - alert: LinkSaturation
+        # 80 % des liens d'agence (100 Mb/s)
+        expr: irate(ifHCOutOctets{ifName=~"eth[1-9]"}[10m]) * 8 > 80e6
+        labels:
+          detects: saturation microburst
+        annotations:
+          summary: "{{ $labels.instance }} {{ $labels.ifName }} : plus de 80 Mb/s en moyenne sur 5 min"
+
+      - alert: HighPacketRate
+        # 1,5 × la pire moyenne sur 5 min du trafic de fond (871 paquets/s,
+        # calibration du 2026-10-18, voir docs/protocole-mesure.md)
+        expr: irate(ifHCInUcastPkts{ifName=~"eth[1-9]"}[10m]) > 1300
+        labels:
+          detects: port_scan syn_flood dns_anomaly
+        annotations:
+          summary: "{{ $labels.instance }} {{ $labels.ifName }} : plus de 1300 paquets/s en moyenne sur 5 min"

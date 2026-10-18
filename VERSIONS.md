@@ -10,8 +10,11 @@ Relevées le 2026-10-18. On ne monte une version qu'en le notant ici.
 | softflowd (IPFIX) | 1.1.0 + correctif `f5c0f99` | compilé, voir `docs/decisions/ADR-001-export-flux.md` |
 | node_exporter | 1.12.1 | release GitHub |
 | goflow2 | v2.2.7 | `netsampler/goflow2` sur Docker Hub |
+| Net-SNMP (snmpd) | 5.9.4 | paquet Ubuntu 24.04 |
+| snmp_exporter | v0.30.1 | `prom/snmp-exporter` |
+| Prometheus | v3.15.0 | `prom/prometheus` |
+| Alertmanager | v0.34.1 | `prom/alertmanager` |
+| Grafana | 13.2.4 | `grafana/grafana` (l'image `grafana-oss` n'est plus publiée après 13.0.2) |
+| Python (alertsink) | 3.12 | `python:3.12-slim` |
 | Containerlab | 0.81.1 | script d'installation officiel |
 | Docker Engine | 29.1.3 | paquet Ubuntu (relevé sur le poste d'Adel) |
-
-À ajouter aux jalons suivants : snmp_exporter v0.30.1 (J3), Prometheus v3.15.0,
-Alertmanager v0.34.1, Grafana 13.2.4 (J3 à J5).

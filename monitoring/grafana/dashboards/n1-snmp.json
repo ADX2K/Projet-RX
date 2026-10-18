@@ -1,0 +1,118 @@
+{
+  "uid": "rt3p9-n1-snmp",
+  "title": "N1 · Supervision SNMP (relevé toutes les 5 min)",
+  "tags": ["projet9", "N1"],
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "1m",
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "Ce que voit une supervision SNMP classique : **un point toutes les 5 minutes**, donc des moyennes sur 5 minutes. Une rafale de 10 s à 100 % de la capacité y apparaît autour de 3 %. Les lignes rouges sont les seuils des alertes N1."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Débit sortant par interface (moyenne SNMP sur 5 min)",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "prom-snmp" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "irate(ifHCOutOctets{ifName=~\"eth[1-9]\"}[10m]) * 8",
+          "legendFormat": "{{instance}} {{ifName}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "min": 0,
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "showPoints": "always",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 80000000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "last"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Paquets reçus par seconde et par interface (moyenne SNMP sur 5 min)",
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "prom-snmp" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "irate(ifHCInUcastPkts{ifName=~\"eth[1-9]\"}[10m])",
+          "legendFormat": "{{instance}} {{ifName}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "min": 0,
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "showPoints": "always",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 1300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "last"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Alertes N1 actives",
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prom-snmp" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true, "job": true }
+          }
+        }
+      ]
+    }
+  ]
+}

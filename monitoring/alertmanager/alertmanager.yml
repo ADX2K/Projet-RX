@@ -1,0 +1,15 @@
+# Alertmanager : reçoit les alertes des deux Prometheus (N1 et, au J5, N2)
+# et les transmet toutes, une par une et sans attendre, à alertsink.
+
+route:
+  receiver: alertsink
+  group_by: ["..."]          # pas de regroupement : chaque alerte part seule
+  group_wait: 0s             # défaut 30 s : fausserait le délai de détection
+  group_interval: 10s
+  repeat_interval: 4h
+
+receivers:
+  - name: alertsink
+    webhook_configs:
+      - url: http://clab-rt3p9-alertsink:9095/alert
+        send_resolved: true

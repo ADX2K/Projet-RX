@@ -1,0 +1,44 @@
+# prom-snmp : supervision de référence (niveau N1).
+# Interroge les routeurs en SNMP toutes les 5 minutes, comme une supervision classique.
+# Lancé avec --query.lookback-delta=10m (voir lab/topology.clab.yml) : avec un point
+# toutes les 300 s, la fenêtre par défaut de 5 min ferait « clignoter » les séries.
+
+global:
+  scrape_interval: 300s
+  scrape_timeout: 30s
+  evaluation_interval: 30s
+  external_labels:
+    level: N1                        # chaque alerte porte le niveau qui l'a produite
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["clab-rt3p9-alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+scrape_configs:
+  # Prometheus ne parle pas SNMP : il demande à snmp_exporter d'interroger
+  # chaque routeur (paramètre target) et récupère le résultat.
+  - job_name: snmp
+    metrics_path: /snmp
+    params:
+      module: [if_mib]               # compteurs d'interfaces (IF-MIB)
+      auth: [public_v2]              # SNMP v2c, communauté « public »
+    static_configs:
+      - targets:
+          - clab-rt3p9-r-core1
+          - clab-rt3p9-r-core2
+          - clab-rt3p9-r-hq
+          - clab-rt3p9-r-dc
+          - clab-rt3p9-r-br1
+          - clab-rt3p9-r-br2
+    relabel_configs:
+      - source_labels: [__address__]       # le routeur devient le paramètre target
+        target_label: __param_target
+      - source_labels: [__param_target]    # instance = nom court du routeur (r-core1…)
+        regex: clab-rt3p9-(.*)
+        target_label: instance
+      - target_label: __address__          # la requête part vers snmp_exporter
+        replacement: clab-rt3p9-snmp-exporter:9116

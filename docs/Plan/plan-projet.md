@@ -8,6 +8,13 @@
 > - FRR 8.4.4 (paquet Ubuntu) au lieu de 10.x : suffisant pour OSPFv2/v3.
 > - hsflowd et softflowd sont compilés dans l'image (softflowd 1.1.0 + correctif amont pour le faible trafic).
 > - Deux commutateurs L2 ajoutés (`sw-hq`, `sw-dc`) pour les LAN à plusieurs hôtes.
+>
+> **Écarts constatés au jalon J3** (détail dans `docs/protocole-mesure.md`) :
+> - Incidents et banc de mesure réunis dans `src/bench/` (au lieu de `src/scenarios/` et `src/campaign/`).
+> - `alertsink` écrit les alertes sur sa sortie standard (`docker logs`) au lieu d'un fichier `alerts.jsonl` : pas de problème de droits sur les fichiers.
+> - Grafana : image `grafana/grafana` (l'image `grafana-oss` n'est plus publiée).
+> - SYN flood mesuré à ≈ 3800 SYN/s (hping3 n'atteint pas les 5000/s visés).
+> - Seuil N1 `HighPacketRate` = 1300 paquets/s, calibré sur le trafic de fond (`make calibrate`).
 
 ## 0. En bref
 

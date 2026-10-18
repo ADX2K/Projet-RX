@@ -1,0 +1,12 @@
+# Sources de données Grafana, chargées au démarrage.
+# prom-flow (N2) sera ajouté au jalon J5.
+apiVersion: 1
+
+datasources:
+  - name: prom-snmp (N1)
+    uid: prom-snmp
+    type: prometheus
+    url: http://clab-rt3p9-prom-snmp:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 300s           # un point toutes les 5 min

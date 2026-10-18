@@ -1,0 +1,11 @@
+# Les tableaux de bord sont des fichiers JSON versionnés dans monitoring/grafana/dashboards/.
+# Une modification faite dans l'interface est perdue au redémarrage :
+# exporter le JSON (Share > Export) et le copier dans ce dossier.
+apiVersion: 1
+
+providers:
+  - name: rt3p9
+    folder: Projet 9
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

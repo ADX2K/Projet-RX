@@ -1,4 +1,4 @@
-# Lab rt3p9 : réseau d'entreprise simulé du projet 9 (jalon J2).
+# Lab rt3p9 : réseau d'entreprise simulé du projet 9.
 # Schéma et plan d'adressage : docs/adressage.md
 #
 # Lancer :  make up      Vérifier : make check      Arrêter : make down
@@ -11,146 +11,176 @@ mgmt:
   ipv4-subnet: 172.20.30.0/24
 
 topology:
-  # Valeurs communes à tous les nœuds (une valeur du nœud l'emporte).
-  kinds:
-    linux:
-      privileged: true                 # sysctl, tc et captures pcap dans les conteneurs
+  # Réglages communs par famille de nœuds. Un nœud hérite de son groupe ;
+  # ce qu'il déclare lui-même s'ajoute (binds, env) ou l'emporte.
+  groups:
+    routers:
+      kind: linux
+      image: rt3/router:1.0
+      privileged: true                 # sysctl, tc et captures pcap
+      binds:
+        - frr/daemons:/etc/frr/daemons:ro
+        - snmp/snmpd.conf:/etc/snmp/snmpd.conf:ro
       env:
+        ENABLE_SNMP: "true"            # N1 : SNMP toujours actif
         ENABLE_FLOW: "false"
         FLOW_COLLECTOR: 172.20.30.50
         SFLOW_N: "512"
 
+    hosts:
+      kind: linux
+      image: rt3/host:1.0
+      privileged: true
+
+    monitoring:
+      kind: linux
+
   nodes:
     # --- Routeurs de cœur ---------------------------------------------------
     r-core1:
-      kind: linux
-      image: rt3/router:1.0
+      group: routers
       mgmt-ipv4: 172.20.30.11
-      binds:
-        - frr/daemons:/etc/frr/daemons:ro
-        - frr/r-core1.conf:/etc/frr/frr.conf:ro
+      binds: [frr/r-core1.conf:/etc/frr/frr.conf:ro]
       env:
         SHAPE: eth3=100mbit            # lien vers r-br1
         FLOW_IFACES: eth1              # lien de cœur
 
     r-core2:
-      kind: linux
-      image: rt3/router:1.0
+      group: routers
       mgmt-ipv4: 172.20.30.12
-      binds:
-        - frr/daemons:/etc/frr/daemons:ro
-        - frr/r-core2.conf:/etc/frr/frr.conf:ro
+      binds: [frr/r-core2.conf:/etc/frr/frr.conf:ro]
       env:
         SHAPE: eth3=100mbit            # lien vers r-br2
 
     # --- Routeurs d'accès ---------------------------------------------------
     r-hq:
-      kind: linux
-      image: rt3/router:1.0
+      group: routers
       mgmt-ipv4: 172.20.30.13
-      binds:
-        - frr/daemons:/etc/frr/daemons:ro
-        - frr/r-hq.conf:/etc/frr/frr.conf:ro
+      binds: [frr/r-hq.conf:/etc/frr/frr.conf:ro]
       env:
         FLOW_IFACES: eth2
 
     r-dc:
-      kind: linux
-      image: rt3/router:1.0
+      group: routers
       mgmt-ipv4: 172.20.30.14
-      binds:
-        - frr/daemons:/etc/frr/daemons:ro
-        - frr/r-dc.conf:/etc/frr/frr.conf:ro
+      binds: [frr/r-dc.conf:/etc/frr/frr.conf:ro]
       env:
         FLOW_IFACES: eth2
 
     r-br1:
-      kind: linux
-      image: rt3/router:1.0
+      group: routers
       mgmt-ipv4: 172.20.30.15
-      binds:
-        - frr/daemons:/etc/frr/daemons:ro
-        - frr/r-br1.conf:/etc/frr/frr.conf:ro
+      binds: [frr/r-br1.conf:/etc/frr/frr.conf:ro]
       env:
         SHAPE: eth1=100mbit            # lien vers r-core1
         FLOW_IFACES: eth2
         ENABLE_FLOW: "true"            # spike J2 : seul routeur qui exporte (J5 : tous)
 
     r-br2:
-      kind: linux
-      image: rt3/router:1.0
+      group: routers
       mgmt-ipv4: 172.20.30.16
-      binds:
-        - frr/daemons:/etc/frr/daemons:ro
-        - frr/r-br2.conf:/etc/frr/frr.conf:ro
+      binds: [frr/r-br2.conf:/etc/frr/frr.conf:ro]
       env:
         SHAPE: eth1=100mbit            # lien vers r-core2
         FLOW_IFACES: eth2
 
     # --- Commutateurs L2 (pont Linux) ---------------------------------------
-    sw-hq:
-      kind: linux
-      image: rt3/host:1.0
-      mgmt-ipv4: 172.20.30.121
-      env: { ROLE: switch }
-
-    sw-dc:
-      kind: linux
-      image: rt3/host:1.0
-      mgmt-ipv4: 172.20.30.122
-      env: { ROLE: switch }
+    sw-hq:   { group: hosts, mgmt-ipv4: 172.20.30.121, env: { ROLE: switch } }
+    sw-dc:   { group: hosts, mgmt-ipv4: 172.20.30.122, env: { ROLE: switch } }
 
     # --- Hôtes --------------------------------------------------------------
     h-user1:
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.101
       env: { ADDR4: 10.9.1.10/24, GW4: 10.9.1.1, ADDR6: "fd00:9:1::10/64", GW6: "fd00:9:1::1" }
 
     h-user2:
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.102
       env: { ADDR4: 10.9.1.11/24, GW4: 10.9.1.1, ADDR6: "fd00:9:1::11/64", GW6: "fd00:9:1::1" }
 
     h-web:
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.103
       env: { ADDR4: 10.9.2.10/24, GW4: 10.9.2.1, ADDR6: "fd00:9:2::10/64", GW6: "fd00:9:2::1", SERVICES: web }
 
     h-dns:
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.104
       env: { ADDR4: 10.9.2.11/24, GW4: 10.9.2.1, ADDR6: "fd00:9:2::11/64", GW6: "fd00:9:2::1", SERVICES: dns }
 
     h-iperf:
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.105
       env: { ADDR4: 10.9.2.12/24, GW4: 10.9.2.1, ADDR6: "fd00:9:2::12/64", GW6: "fd00:9:2::1", SERVICES: iperf }
 
     h-br1:
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.106
       env: { ADDR4: 10.9.3.10/24, GW4: 10.9.3.1, ADDR6: "fd00:9:3::10/64", GW6: "fd00:9:3::1" }
 
     h-atk:                             # générateur d'incidents (labo isolé)
-      kind: linux
-      image: rt3/host:1.0
+      group: hosts
       mgmt-ipv4: 172.20.30.107
       env: { ADDR4: 10.9.4.10/24, GW4: 10.9.4.1, ADDR6: "fd00:9:4::10/64", GW6: "fd00:9:4::1" }
 
     # --- Supervision --------------------------------------------------------
+    # Accès depuis Windows : Grafana http://localhost:3000,
+    # prom-snmp http://localhost:9091, Alertmanager http://localhost:9093
+
     # goflow2 reçoit sFlow (6343) et IPFIX (4739) et écrit un flux JSON par ligne
-    # sur sa sortie standard :  docker logs -f clab-rt3p9-goflow2
+    # sur sa sortie standard :  make flows
     goflow2:
-      kind: linux
+      group: monitoring
       image: netsampler/goflow2:v2.2.7
       mgmt-ipv4: 172.20.30.50
       cmd: -listen=sflow://:6343,netflow://:4739 -format=json
+
+    # N1 : Prometheus interroge les routeurs en SNMP toutes les 5 min via snmp_exporter.
+    snmp-exporter:
+      group: monitoring
+      image: prom/snmp-exporter:v0.30.1
+      mgmt-ipv4: 172.20.30.56
+
+    prom-snmp:
+      group: monitoring
+      image: prom/prometheus:v3.15.0
+      mgmt-ipv4: 172.20.30.52
+      binds: [../monitoring/prom-snmp:/etc/prometheus:ro]
+      cmd: >-
+        --config.file=/etc/prometheus/prometheus.yml
+        --storage.tsdb.path=/prometheus
+        --query.lookback-delta=10m
+      ports: ["9091:9090"]
+
+    # Alertes : Prometheus -> Alertmanager -> alertsink (journal horodaté).
+    alertmanager:
+      group: monitoring
+      image: prom/alertmanager:v0.34.1
+      mgmt-ipv4: 172.20.30.54
+      binds: [../monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
+      ports: ["9093:9093"]
+
+    alertsink:
+      group: monitoring
+      image: python:3.12-slim
+      mgmt-ipv4: 172.20.30.57
+      binds: [../src/alertsink/alertsink.py:/app/alertsink.py:ro]
+      cmd: python3 -u /app/alertsink.py
+
+    # Tableaux de bord, sans compte (accès anonyme en administrateur : labo local).
+    grafana:
+      group: monitoring
+      image: grafana/grafana:13.2.4
+      mgmt-ipv4: 172.20.30.55
+      binds:
+        - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+        - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      env:
+        GF_AUTH_ANONYMOUS_ENABLED: "true"
+        GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+        GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      ports: ["3000:3000"]
 
   links:
     # cœur

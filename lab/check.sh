@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Vérifie que le labo rt3p9 fonctionne (jalon J2) :
-#   1. conteneurs démarrés        4. débit limité à 100 Mb/s sur l'agence 1
-#   2. voisins OSPFv2 et OSPFv3   5. services web et DNS
-#   3. ping IPv4 et IPv6          6. flux sFlow et IPFIX reçus par goflow2
+# Vérifie que le labo rt3p9 fonctionne :
+#   1. conteneurs démarrés        5. services web et DNS
+#   2. voisins OSPFv2 et OSPFv3   6. flux sFlow et IPFIX reçus par goflow2
+#   3. ping IPv4 et IPv6          7. supervision N1 : SNMP, Prometheus, Grafana,
+#   4. débit limité à 100 Mb/s       chaîne d'alerte jusqu'à alertsink
 # Code de sortie : nombre de vérifications en échec (0 = tout est bon).
 set -uo pipefail
 
@@ -25,7 +26,8 @@ HOSTS=(
   "h-atk   10.9.4.10 fd00:9:4::10"
 )
 NODES=(r-core1 r-core2 r-hq r-dc r-br1 r-br2 sw-hq sw-dc
-       h-user1 h-user2 h-web h-dns h-iperf h-br1 h-atk goflow2)
+       h-user1 h-user2 h-web h-dns h-iperf h-br1 h-atk
+       goflow2 snmp-exporter prom-snmp alertmanager alertsink grafana)
 
 echo "1. Conteneurs"
 for node in "${NODES[@]}"; do
@@ -75,6 +77,29 @@ sflow=$(grep -c '"type":"SFLOW_5"' <<< "$logs")
 ipfix=$(grep -c '"type":"IPFIX"' <<< "$logs")
 [ "$sflow" -gt 0 ] && ok "sFlow : $sflow enregistrements" || ko "sFlow : aucun enregistrement"
 [ "$ipfix" -gt 0 ] && ok "IPFIX : $ipfix enregistrements" || ko "IPFIX : aucun enregistrement"
+
+echo "7. Supervision N1"
+for entry in "${ROUTERS[@]}"; do
+  router=${entry%%:*}
+  url="http://clab-$LAB-snmp-exporter:9116/snmp?target=clab-$LAB-$router&module=if_mib&auth=public_v2"
+  n=$(run prom-snmp wget -qO- "$url" 2>/dev/null | grep -c '^ifHCInOctets{')
+  [ "$n" -gt 0 ] && ok "SNMP $router : $n interfaces" || ko "SNMP $router : pas de réponse"
+done
+curl -sf localhost:9091/-/ready > /dev/null && ok "prom-snmp prêt (localhost:9091)" || ko "prom-snmp ne répond pas"
+curl -sf localhost:3000/api/datasources/uid/prom-snmp/health | grep -q '"status":"OK"' \
+  && ok "grafana interroge prom-snmp (localhost:3000)" || ko "grafana n'arrive pas à interroger prom-snmp"
+curl -sf 'localhost:3000/api/search?query=' | grep -q rt3p9-n1-snmp \
+  && ok "tableau de bord N1 chargé" || ko "tableau de bord N1 absent"
+
+# Une alerte de test envoyée à Alertmanager doit arriver dans alertsink.
+name="CheckChain$(date +%s)"
+ends=$(date -u -d '+30 sec' +%Y-%m-%dT%H:%M:%SZ)
+curl -sf -X POST -H 'Content-Type: application/json' localhost:9093/api/v2/alerts \
+  -d "[{\"labels\": {\"alertname\": \"$name\", \"level\": \"test\"}, \"endsAt\": \"$ends\"}]"
+sleep 3
+docker logs "clab-$LAB-alertsink" 2>&1 | grep -q "$name" \
+  && ok "chaîne d'alerte : Alertmanager -> alertsink" \
+  || ko "chaîne d'alerte : l'alerte de test n'est pas arrivée dans alertsink"
 
 echo
 [ "$fails" -eq 0 ] && echo "Tout est bon." || echo "$fails vérification(s) en échec."

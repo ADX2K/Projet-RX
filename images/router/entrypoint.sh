@@ -3,6 +3,7 @@
 #
 # Variables d'environnement (fixées dans lab/topology.clab.yml) :
 #   SHAPE           liens à limiter, ex. "eth3=100mbit"        (vide = aucun)
+#   ENABLE_SNMP     true pour démarrer l'agent SNMP            (défaut : false)
 #   ENABLE_FLOW     true pour exporter sFlow + IPFIX           (défaut : false)
 #   FLOW_IFACES     interfaces mesurées, ex. "eth2"
 #   FLOW_COLLECTOR  adresse du collecteur goflow2               ex. 172.20.30.50
@@ -39,10 +40,20 @@ done
 # 4. FRR lit /etc/frr/daemons et /etc/frr/frr.conf (montés depuis lab/frr/).
 /usr/lib/frr/frrinit.sh start
 
-# 5. Export de flux (sFlow avec hsflowd, IPFIX avec softflowd).
-#    Les agents tournent au premier plan (-d) en tâche de fond de ce script :
-#    leurs messages arrivent dans « docker logs ». (En mode démon, softflowd
-#    s'arrêtait sans message au spike J2.)
+# Les agents de télémétrie tournent au premier plan en tâche de fond de ce
+# script : leurs messages arrivent dans « docker logs ». (En mode démon,
+# softflowd s'arrêtait sans message au spike J2.)
+
+# 5. SNMP (référence N1) : agent Net-SNMP, config dans lab/snmp/snmpd.conf.
+#    -f premier plan · -Lo journal sur la sortie standard · -C ignorer les configs par défaut
+#    MIBS= : ne charger aucun fichier MIB (un agent n'en a pas besoin, et ceux
+#    d'Ubuntu sont incomplets : 42 avertissements « Cannot find module »)
+if [ "${ENABLE_SNMP:-false}" = true ]; then
+  MIBS= snmpd -f -Lo -C -c /etc/snmp/snmpd.conf &
+  log "SNMP : agent démarré (udp/161)"
+fi
+
+# 6. Export de flux (sFlow avec hsflowd, IPFIX avec softflowd).
 if [ "${ENABLE_FLOW:-false}" = true ]; then
   {
     echo "sflow {"
