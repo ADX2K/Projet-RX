@@ -1,0 +1,4 @@
+# Fins de ligne Unix partout : les scripts et les configs tournent dans des conteneurs Linux.
+* text=auto eol=lf
+*.png binary
+*.pcap binary

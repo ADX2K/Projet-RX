@@ -1,0 +1,10 @@
+# Démons FRR lancés sur chaque routeur (fichier commun à tous les routeurs).
+# zebra, staticd et watchfrr démarrent toujours ; on ajoute OSPFv2 et OSPFv3.
+ospfd=yes
+ospf6d=yes
+
+vtysh_enable=yes
+zebra_options="  -A 127.0.0.1 -s 90000000"
+staticd_options="-A 127.0.0.1"
+ospfd_options="  -A 127.0.0.1"
+ospf6d_options=" -A ::1"

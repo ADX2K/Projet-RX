@@ -1,0 +1,10 @@
+# Fichiers générés par Containerlab
+lab/clab-*/
+lab/.*.bak
+# Python
+__pycache__/
+.venv/
+
+# Données volumineuses (archivées hors Git)
+results/raw/
+captures/
