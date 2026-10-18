@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Vérifie que le labo rt3p9 fonctionne :
 #   1. conteneurs démarrés        5. services web et DNS
-#   2. voisins OSPFv2 et OSPFv3   6. flux sFlow et IPFIX reçus par goflow2
-#   3. ping IPv4 et IPv6          7. supervision N1 : SNMP, Prometheus, Grafana,
-#   4. débit limité à 100 Mb/s       chaîne d'alerte jusqu'à alertsink
+#   2. voisins OSPFv2 et OSPFv3   6. supervision N1 : SNMP, prom-snmp, Grafana
+#   3. ping IPv4 et IPv6          7. supervision N2 : node_exporter, flux, prom-flow, Grafana
+#   4. débit limité à 100 Mb/s    8. alertes : chaîne jusqu'à alertsink et historique (alertdb)
 # Code de sortie : nombre de vérifications en échec (0 = tout est bon).
 set -uo pipefail
 
@@ -27,7 +27,7 @@ HOSTS=(
 )
 NODES=(r-core1 r-core2 r-hq r-dc r-br1 r-br2 sw-hq sw-dc
        h-user1 h-user2 h-web h-dns h-iperf h-br1 h-atk
-       goflow2 snmp-exporter prom-snmp alertmanager alertsink grafana)
+       snmp-exporter prom-snmp flowcol prom-flow alertmanager alertsink alertdb grafana)
 
 echo "1. Conteneurs"
 for node in "${NODES[@]}"; do
@@ -58,6 +58,7 @@ done
 
 echo "4. Débit h-br1 -> h-iperf (lien de l'agence limité à 100 Mb/s)"
 mbps=$(run h-br1 iperf3 -c 10.9.2.12 -p 5204 -t 3 -f m | awk '/receiver/ {print $(NF-2)}')
+iperf_end=$(date +%s)
 if awk -v x="${mbps:-0}" 'BEGIN { exit !(x >= 80 && x <= 105) }'; then
   ok "${mbps} Mb/s"
 else
@@ -70,15 +71,7 @@ code=$(run h-user1 curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://10
 answer=$(run h-user1 dig +short +time=2 @10.9.2.11 web.rt3.lab A)
 [ "$answer" = 10.9.2.10 ] && ok "dns : web.rt3.lab = $answer" || ko "dns : réponse '${answer}'"
 
-echo "6. Flux reçus par goflow2 (attente de 12 s pour l'export IPFIX)"
-sleep 12
-logs=$(docker logs --since 2m "clab-$LAB-goflow2" 2>&1)
-sflow=$(grep -c '"type":"SFLOW_5"' <<< "$logs")
-ipfix=$(grep -c '"type":"IPFIX"' <<< "$logs")
-[ "$sflow" -gt 0 ] && ok "sFlow : $sflow enregistrements" || ko "sFlow : aucun enregistrement"
-[ "$ipfix" -gt 0 ] && ok "IPFIX : $ipfix enregistrements" || ko "IPFIX : aucun enregistrement"
-
-echo "7. Supervision N1"
+echo "6. Supervision N1 (SNMP toutes les 5 min)"
 for entry in "${ROUTERS[@]}"; do
   router=${entry%%:*}
   url="http://clab-$LAB-snmp-exporter:9116/snmp?target=clab-$LAB-$router&module=if_mib&auth=public_v2"
@@ -87,19 +80,50 @@ for entry in "${ROUTERS[@]}"; do
 done
 curl -sf localhost:9091/-/ready > /dev/null && ok "prom-snmp prêt (localhost:9091)" || ko "prom-snmp ne répond pas"
 curl -sf localhost:3000/api/datasources/uid/prom-snmp/health | grep -q '"status":"OK"' \
-  && ok "grafana interroge prom-snmp (localhost:3000)" || ko "grafana n'arrive pas à interroger prom-snmp"
+  && ok "grafana interroge prom-snmp" || ko "grafana n'arrive pas à interroger prom-snmp"
 curl -sf 'localhost:3000/api/search?query=' | grep -q rt3p9-n1-snmp \
   && ok "tableau de bord N1 chargé" || ko "tableau de bord N1 absent"
 
-# Une alerte de test envoyée à Alertmanager doit arriver dans alertsink.
+echo "7. Supervision N2 (compteurs à 1 s et flux)"
+for entry in "${ROUTERS[@]}"; do
+  router=${entry%%:*}
+  n=$(run prom-flow wget -qO- "http://clab-$LAB-$router:9100/metrics" 2>/dev/null \
+      | grep -c '^node_network_transmit_bytes_total{')
+  [ "$n" -gt 0 ] && ok "node_exporter $router : $n interfaces" || ko "node_exporter $router : pas de réponse"
+done
+# IPFIX exporte chaque flux au plus tard 10 s après son début : on laisse passer
+# au moins 12 s depuis le trafic iperf3 de l'étape 4.
+wait_s=$(( iperf_end + 12 - $(date +%s) ))
+[ "$wait_s" -gt 0 ] && sleep "$wait_s"
+metrics=$(run prom-flow wget -qO- "http://clab-$LAB-flowcol:9199/metrics" 2>/dev/null)
+for exporter in sflow ipfix; do
+  routers=$(grep "^rt3_flow_packets_total{exporter=\"$exporter\"" <<< "$metrics" \
+            | sed 's/.*router="\([^"]*\)".*/\1/' | sort -u | tr '\n' ' ')
+  [ -n "$routers" ] && ok "$exporter reçu de : $routers" || ko "$exporter : aucun flux reçu par flowcol"
+done
+curl -sf localhost:9090/-/ready > /dev/null && ok "prom-flow prêt (localhost:9090)" || ko "prom-flow ne répond pas"
+curl -sf localhost:3000/api/datasources/uid/prom-flow/health | grep -q '"status":"OK"' \
+  && ok "grafana interroge prom-flow" || ko "grafana n'arrive pas à interroger prom-flow"
+curl -sf 'localhost:3000/api/search?query=' | grep -q rt3p9-n2-flux \
+  && ok "tableau de bord N2 chargé" || ko "tableau de bord N2 absent"
+
+echo "8. Alertes (communes aux deux niveaux)"
+# Une alerte de test envoyée à Alertmanager doit arriver dans alertsink,
+# puis être enregistrée dans l'historique (alertdb).
 name="CheckChain$(date +%s)"
 ends=$(date -u -d '+30 sec' +%Y-%m-%dT%H:%M:%SZ)
 curl -sf -X POST -H 'Content-Type: application/json' localhost:9093/api/v2/alerts \
   -d "[{\"labels\": {\"alertname\": \"$name\", \"level\": \"test\"}, \"endsAt\": \"$ends\"}]"
 sleep 3
 docker logs "clab-$LAB-alertsink" 2>&1 | grep -q "$name" \
-  && ok "chaîne d'alerte : Alertmanager -> alertsink" \
-  || ko "chaîne d'alerte : l'alerte de test n'est pas arrivée dans alertsink"
+  && ok "Alertmanager -> alertsink" \
+  || ko "l'alerte de test n'est pas arrivée dans alertsink"
+stored=$(run alertdb psql -U rt3 -d alerts -tAc "SELECT count(*) FROM alerts WHERE alertname = '$name'")
+[ "$stored" = 1 ] && ok "alertsink -> historique (alertdb)" || ko "l'alerte de test n'est pas dans l'historique"
+curl -sf localhost:3000/api/datasources/uid/alertdb/health | grep -q '"status":"OK"' \
+  && ok "grafana lit l'historique (alertdb)" || ko "grafana n'arrive pas à lire alertdb"
+curl -sf 'localhost:3000/api/search?query=' | grep -q rt3p9-alertes \
+  && ok "tableau de bord Alertes chargé" || ko "tableau de bord Alertes absent"
 
 echo
 [ "$fails" -eq 0 ] && echo "Tout est bon." || echo "$fails vérification(s) en échec."

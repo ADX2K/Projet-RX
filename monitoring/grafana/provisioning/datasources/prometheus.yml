@@ -1,5 +1,5 @@
-# Sources de données Grafana, chargées au démarrage.
-# prom-flow (N2) sera ajouté au jalon J5.
+# Sources de données Grafana, chargées au démarrage : un Prometheus par niveau,
+# et la base de l'historique des alertes.
 apiVersion: 1
 
 datasources:
@@ -10,3 +10,22 @@ datasources:
     isDefault: true
     jsonData:
       timeInterval: 300s           # un point toutes les 5 min
+
+  - name: prom-flow (N2)
+    uid: prom-flow
+    type: prometheus
+    url: http://clab-rt3p9-prom-flow:9090
+    jsonData:
+      timeInterval: 1s             # un point par seconde
+
+  - name: alertdb (historique des alertes)
+    uid: alertdb
+    type: grafana-postgresql-datasource
+    url: clab-rt3p9-alertdb:5432
+    user: rt3
+    jsonData:
+      database: alerts
+      sslmode: disable
+      postgresVersion: 1700
+    secureJsonData:
+      password: rt3                # identifiants de labo (réseau de gestion seulement)

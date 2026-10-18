@@ -1,0 +1,220 @@
+{
+  "uid": "rt3p9-n2-flux",
+  "title": "N2 · Télémétrie de flux (relevé toutes les secondes)",
+  "tags": ["projet9", "N2"],
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "links": [
+    { "title": "Projet 9", "type": "dashboards", "tags": ["projet9"], "asDropdown": false, "keepTime": true }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "Ce que voit la supervision après migration : **un point par seconde** (compteurs d'interfaces) et **les flux** (qui parle à qui, ports, SYN, DNS) grâce à sFlow et IPFIX. Le premier graphique superpose N1 et N2 sur le même lien. Les lignes rouges sont les seuils des alertes N2."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "N1 contre N2 : débit sortant du lien de l'agence 1 (r-br1 eth1, 100 Mb/s)",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 9 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prom-snmp" },
+          "expr": "irate(ifHCOutOctets{instance=\"r-br1\", ifName=\"eth1\"}[10m]) * 8",
+          "legendFormat": "N1 · SNMP (moyenne sur 5 min)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prom-flow" },
+          "expr": "rate(node_network_transmit_bytes_total{instance=\"r-br1\", device=\"eth1\"}[5s]) * 8",
+          "legendFormat": "N2 · node_exporter (moyenne sur 5 s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "min": 0,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 80000000 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "N1 · SNMP (moyenne sur 5 min)" },
+            "properties": [
+              { "id": "custom.lineInterpolation", "value": "stepAfter" },
+              { "id": "custom.lineWidth", "value": 3 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Débit sortant par interface (moyenne sur 5 s)",
+      "gridPos": { "x": 0, "y": 12, "w": 14, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prom-flow" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_network_transmit_bytes_total{device=~\"eth[1-9]\"}[5s]) * 8",
+          "legendFormat": "{{instance}} {{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "min": 0,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 80000000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "bargauge",
+      "title": "Qui parle à qui (IPFIX, débit moyen sur 1 min)",
+      "description": "Maximum entre les points de mesure, pas la somme : un même flux est vu par plusieurs routeurs.",
+      "gridPos": { "x": 14, "y": 12, "w": 10, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prom-flow" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, max by (src_addr, dst_addr) (rate(rt3_flow_talker_bytes_total{exporter=\"ipfix\"}[1m]) * 8))",
+          "legendFormat": "{{src_addr}} → {{dst_addr}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bps", "min": 0 },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "SYN par seconde (sFlow)",
+      "gridPos": { "x": 0, "y": 21, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom-flow" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (router) (rate(rt3_flow_tcp_syn_total{exporter=\"sflow\"}[5s]))",
+          "legendFormat": "{{router}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Requêtes DNS par seconde (sFlow)",
+      "gridPos": { "x": 8, "y": 21, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom-flow" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (router) (rate(rt3_flow_dns_queries_total{exporter=\"sflow\"}[10s]))",
+          "legendFormat": "{{router}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 200 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Ports visés par des SYN depuis une source, sur 10 s (IPFIX)",
+      "gridPos": { "x": 16, "y": 21, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom-flow" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (src_addr) (rt3_flow_syn_dst_ports{exporter=\"ipfix\"})",
+          "legendFormat": "{{src_addr}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    }
+  ]
+}

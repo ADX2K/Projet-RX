@@ -4,8 +4,11 @@
   "tags": ["projet9", "N1"],
   "schemaVersion": 39,
   "editable": true,
-  "time": { "from": "now-3h", "to": "now" },
+  "time": { "from": "now-1h", "to": "now" },
   "refresh": "1m",
+  "links": [
+    { "title": "Projet 9", "type": "dashboards", "tags": ["projet9"], "asDropdown": false, "keepTime": true }
+  ],
   "panels": [
     {
       "id": 1,
@@ -14,14 +17,51 @@
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
       "options": {
         "mode": "markdown",
-        "content": "Ce que voit une supervision SNMP classique : **un point toutes les 5 minutes**, donc des moyennes sur 5 minutes. Une rafale de 10 s à 100 % de la capacité y apparaît autour de 3 %. Les lignes rouges sont les seuils des alertes N1."
+        "content": "Ce que voit une supervision SNMP classique : **un point toutes les 5 minutes** par routeur, donc des moyennes sur 5 minutes. Une rafale de 10 s à 100 % de la capacité y apparaît autour de 3 % ; un scan de ports n'y apparaît pas. Les lignes rouges sont les seuils des alertes N1."
+      }
+    },
+    {
+      "id": 4,
+      "type": "bargauge",
+      "title": "Temps écoulé depuis le dernier relevé SNMP de chaque routeur (un relevé toutes les 300 s)",
+      "description": "Un incident n'apparaît dans N1 qu'au relevé suivant : quand la jauge revient à zéro.",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prom-snmp" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - timestamp(up{job=\"snmp\"})",
+          "legendFormat": "{{instance}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "min": 0,
+          "max": 300,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "red", "value": 330 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
       }
     },
     {
       "id": 2,
       "type": "timeseries",
       "title": "Débit sortant par interface (moyenne SNMP sur 5 min)",
-      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 10 },
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 10 },
       "datasource": { "type": "prometheus", "uid": "prom-snmp" },
       "targets": [
         {
@@ -58,7 +98,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Paquets reçus par seconde et par interface (moyenne SNMP sur 5 min)",
-      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 10 },
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 10 },
       "datasource": { "type": "prometheus", "uid": "prom-snmp" },
       "targets": [
         {
@@ -90,29 +130,6 @@
         "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "last"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
-    },
-    {
-      "id": 4,
-      "type": "table",
-      "title": "Alertes N1 actives",
-      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "prom-snmp" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true, "job": true }
-          }
-        }
-      ]
     }
   ]
 }

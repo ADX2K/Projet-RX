@@ -1,0 +1,83 @@
+{
+  "uid": "rt3p9-alertes",
+  "title": "Alertes (N1 et N2)",
+  "tags": ["projet9", "alertes"],
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "5s",
+  "links": [
+    { "title": "Projet 9", "type": "dashboards", "tags": ["projet9"], "asDropdown": false, "keepTime": true }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "niveau",
+        "label": "Niveau",
+        "type": "custom",
+        "query": "N1,N2",
+        "multi": true,
+        "includeAll": true,
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "Toutes les alertes des deux niveaux, enregistrées par **alertsink** dans la base **alertdb** : elles sont conservées entre deux `make up`. **Actives** : déclenchées et pas encore résolues. **Historique** : alertes commencées pendant la période choisie en haut à droite. « Reçue » est l'heure d'arrivée chez alertsink, celle que le banc de mesure utilise comme t_detect."
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Alertes actives",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 7 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "alertdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT starts_at AS \"Début\",\n       extract(epoch FROM now() - starts_at) AS \"Depuis\",\n       level AS \"Niveau\", alertname AS \"Alerte\", router AS \"Routeur\",\n       interface AS \"Interface\", summary AS \"Résumé\"\nFROM alerts\nWHERE resolved_at IS NULL AND level IN ($niveau)\nORDER BY starts_at DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Depuis" }, "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 0 }] }
+        ]
+      },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Historique des alertes",
+      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 16 },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "alertdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT starts_at AS \"Début\", ends_at AS \"Fin\",\n       extract(epoch FROM ends_at - starts_at) AS \"Durée\",\n       level AS \"Niveau\", alertname AS \"Alerte\", router AS \"Routeur\",\n       interface AS \"Interface\", summary AS \"Résumé\", received_at AS \"Reçue\"\nFROM alerts\nWHERE level IN ($niveau) AND $__timeFilter(starts_at)\nORDER BY starts_at DESC\nLIMIT 500"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Durée" }, "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 1 }] }
+        ]
+      },
+      "options": { "showHeader": true }
+    }
+  ]
+}

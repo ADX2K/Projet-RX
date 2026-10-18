@@ -11,20 +11,28 @@ NAME  ?=
 FILES ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help images up down check traffic flows alerts inject campaign normal calibrate summary test
+# Volumes Docker des services qui gardent un état (voir lab/topology.clab.yml).
+VOLUMES := rt3p9-prom-snmp rt3p9-prom-flow rt3p9-alertmanager rt3p9-grafana rt3p9-alertdb
+
+.PHONY: help images up down reset-data check traffic flows alerts inject campaign normal calibrate summary test
 
 help: ## Liste les cibles disponibles
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
 
-images: ## Construit les images rt3/router et rt3/host
+images: ## Construit les images du labo (rt3/router, host, flowcol, alertsink)
 	docker build -t rt3/router:1.0 images/router
 	docker build -t rt3/host:1.0 images/host
+	docker build -t rt3/flowcol:1.0 images/flowcol
+	docker build -t rt3/alertsink:1.0 images/alertsink
 
 up: images ## Déploie le labo (reconstruit les images si besoin)
 	$(CLAB) deploy -t $(LAB) --reconfigure
 
-down: ## Détruit le labo
+down: ## Détruit le labo (les données des volumes sont gardées)
 	$(CLAB) destroy -t $(LAB) --cleanup
+
+reset-data: ## Efface les données gardées : métriques, historique des alertes… (après make down)
+	docker volume rm $(VOLUMES)
 
 check: ## Vérifie le labo : réseau, services, flux, supervision
 	bash lab/check.sh
@@ -32,8 +40,8 @@ check: ## Vérifie le labo : réseau, services, flux, supervision
 traffic: ## Lance le trafic de fond (Ctrl+C pour arrêter)
 	python3 src/traffic/bgtraffic.py
 
-flows: ## Affiche les flux reçus par goflow2 (Ctrl+C pour arrêter)
-	docker logs -f --tail 20 clab-rt3p9-goflow2
+flows: ## Affiche le bilan des flux reçus par flowcol, toutes les 10 s (Ctrl+C pour arrêter)
+	docker logs -f --tail 10 clab-rt3p9-flowcol
 
 alerts: ## Affiche les alertes reçues par alertsink (Ctrl+C pour arrêter)
 	docker logs -f --tail 20 clab-rt3p9-alertsink
@@ -53,7 +61,8 @@ calibrate: ## Mesure les paquets/s du trafic normal (seuils N1, 10 min)
 summary: ## Tableau de résultats : make summary NAME=<dossier> FILES="<csv/json de results/raw>"
 	python3 src/analysis/summarize.py --name $(NAME) $(FILES)
 
-test: ## Tests unitaires (flow2prom, banc de mesure, synthèse)
+test: ## Tests unitaires (flow2prom, alertsink, banc de mesure, synthèse)
 	cd src/flow2prom && python3 -m unittest
+	cd src/alertsink && python3 -m unittest
 	cd src/bench && python3 -m unittest
 	cd src/analysis && python3 -m unittest

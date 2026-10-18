@@ -23,6 +23,15 @@
 > - Fenêtre de grâce N1 réduite de 660 à 360 s (l'effet d'un incident apparaît au premier relevé SNMP qui suit sa fin).
 > - Les « autres alertes » causées par l'incident ne sont plus comptées comme fausses alertes ; les fausses alertes
 >   se mesurent en trafic normal seul (`make normal`, 1 h par défaut, 3 h pour la référence).
+>
+> **Écarts constatés au jalon J5** (détail dans `docs/decisions/ADR-002-collecte-flux-N2.md`) :
+> - goflow2 et flow2prom réunis dans un seul conteneur `flowcol` (.50) ; l'adresse .51 n'est plus utilisée.
+> - N1 et N2 tournent en même temps sur le même labo (deux Prometheus, un Alertmanager commun).
+> - Sources des règles N2 : débit via node_exporter, SYN et DNS via sFlow, scan via IPFIX.
+> - Deux problèmes trouvés et corrigés : templates IPFIX perdus (redemandés toutes les 10 s) et
+>   lignes collées par goflow2 sous forte charge (flow2prom ne plante plus).
+> - Ajouts (ADR-003) : historique des alertes dans une base PostgreSQL (`alertdb`), tableau de bord
+>   « Alertes » unique (actives + historique), données conservées dans des volumes Docker (`make reset-data`).
 
 ## 0. En bref
 

@@ -23,7 +23,8 @@ change, on le note ici avec la date.
 - **t_end** : heure de fin de la commande de l'incident.
 - **t_detect** : heure à laquelle `alertsink` reçoit l'alerte. C'est le bout de
   la chaîne : `D = T_collecte + T_évaluation + T_for + T_notification`.
-  Tous les conteneurs partagent l'horloge de la même machine.
+  Tous les conteneurs partagent l'horloge de la même machine. Cette heure est
+  aussi gardée dans l'historique des alertes (base alertdb, colonne `received_at`).
 - **Alerte du bon type** : sa règle liste le scénario dans l'étiquette
   `detects` (voir `monitoring/prom-snmp/rules.yml`).
 - **Détecté** : la première alerte du bon type et du bon niveau (`level`)
@@ -148,6 +149,20 @@ Si le trafic de fond change, refaire la calibration (`make calibrate`) et ajuste
 En SNMP, on ne voit que des compteurs d'interface. N1 ne peut donc pas
 distinguer un scan, un SYN flood et une anomalie DNS : une seule règle
 (`HighPacketRate`) couvre les trois.
+
+## Seuils du niveau N2
+
+Les règles sont dans `monitoring/prom-flow/rules.yml`, une par signature.
+Seuils de départ, à régler au jalon J6 (L6.1).
+
+| Règle | Seuil | Source | Révèle |
+|---|---|---|---|
+| `LinkSaturation` | 80 Mb/s sortants, moyenne sur 5 s | node_exporter | saturation, microburst |
+| `PortScan` | plus de 50 ports visés par des SYN depuis une source, en 10 s | IPFIX | port_scan |
+| `SynFlood` | plus de 1000 SYN/s vus par un routeur | sFlow | syn_flood |
+| `DnsFlood` | plus de 200 requêtes DNS/s vues par un routeur | sFlow | dns_anomaly |
+
+Pourquoi ces sources : voir [ADR-002](decisions/ADR-002-collecte-flux-N2.md).
 
 ## Limites connues
 

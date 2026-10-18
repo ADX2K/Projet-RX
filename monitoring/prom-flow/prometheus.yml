@@ -1,0 +1,39 @@
+# prom-flow : supervision après migration (niveau N2).
+# Relevé toutes les secondes des compteurs d'interfaces (node_exporter sur chaque
+# routeur) et des métriques de flux (flow2prom, à partir de sFlow et IPFIX).
+
+global:
+  scrape_interval: 1s
+  scrape_timeout: 1s
+  evaluation_interval: 1s
+  external_labels:
+    level: N2                        # chaque alerte porte le niveau qui l'a produite
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["clab-rt3p9-alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+scrape_configs:
+  # Compteurs des interfaces de données de chaque routeur.
+  - job_name: node
+    static_configs:
+      - targets:
+          - clab-rt3p9-r-core1:9100
+          - clab-rt3p9-r-core2:9100
+          - clab-rt3p9-r-hq:9100
+          - clab-rt3p9-r-dc:9100
+          - clab-rt3p9-r-br1:9100
+          - clab-rt3p9-r-br2:9100
+    relabel_configs:
+      - source_labels: [__address__]       # instance = nom court du routeur (r-core1…)
+        regex: clab-rt3p9-(.*):9100
+        target_label: instance
+
+  # Métriques de flux (rt3_flow_*), produites par flow2prom dans le conteneur flowcol.
+  - job_name: flow2prom
+    static_configs:
+      - targets: ["clab-rt3p9-flowcol:9199"]

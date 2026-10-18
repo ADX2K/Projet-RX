@@ -2,12 +2,13 @@
 # Démarrage d'un routeur rt3/router.
 #
 # Variables d'environnement (fixées dans lab/topology.clab.yml) :
-#   SHAPE           liens à limiter, ex. "eth3=100mbit"        (vide = aucun)
-#   ENABLE_SNMP     true pour démarrer l'agent SNMP            (défaut : false)
-#   ENABLE_FLOW     true pour exporter sFlow + IPFIX           (défaut : false)
-#   FLOW_IFACES     interfaces mesurées, ex. "eth2"
-#   FLOW_COLLECTOR  adresse du collecteur goflow2               ex. 172.20.30.50
-#   SFLOW_N         échantillonnage sFlow : 1 paquet sur N      ex. 512
+#   SHAPE                 liens à limiter, ex. "eth3=100mbit"       (vide = aucun)
+#   ENABLE_SNMP           true : agent SNMP (N1)                    (défaut : false)
+#   ENABLE_NODE_EXPORTER  true : compteurs d'interfaces à 1 s (N2)  (défaut : false)
+#   ENABLE_FLOW           true : export sFlow + IPFIX (N2)          (défaut : false)
+#   FLOW_IFACES           interfaces mesurées par les flux, ex. "eth2"  (vide = aucune)
+#   FLOW_COLLECTOR        adresse du collecteur flowcol, ex. 172.20.30.50
+#   SFLOW_N               échantillonnage sFlow : 1 paquet sur N, ex. 512
 set -euo pipefail
 
 log() { echo "[$(hostname)] $*"; }
@@ -44,17 +45,25 @@ done
 # script : leurs messages arrivent dans « docker logs ». (En mode démon,
 # softflowd s'arrêtait sans message au spike J2.)
 
-# 5. SNMP (référence N1) : agent Net-SNMP, config dans lab/snmp/snmpd.conf.
+# 5. N1 · SNMP : agent Net-SNMP, config dans lab/snmp/snmpd.conf.
 #    -f premier plan · -Lo journal sur la sortie standard · -C ignorer les configs par défaut
 #    MIBS= : ne charger aucun fichier MIB (un agent n'en a pas besoin, et ceux
 #    d'Ubuntu sont incomplets : 42 avertissements « Cannot find module »)
 if [ "${ENABLE_SNMP:-false}" = true ]; then
   MIBS= snmpd -f -Lo -C -c /etc/snmp/snmpd.conf &
-  log "SNMP : agent démarré (udp/161)"
+  log "N1 · SNMP : agent démarré (udp/161)"
 fi
 
-# 6. Export de flux (sFlow avec hsflowd, IPFIX avec softflowd).
-if [ "${ENABLE_FLOW:-false}" = true ]; then
+# 6. N2 · node_exporter : seulement les compteurs des interfaces de données,
+#    lus toutes les secondes par prom-flow (:9100).
+if [ "${ENABLE_NODE_EXPORTER:-false}" = true ]; then
+  node_exporter --collector.disable-defaults --collector.netdev \
+    --collector.netdev.device-include='^eth[1-9][0-9]*$' --log.level=warn &
+  log "N2 · node_exporter : compteurs d'interfaces (:9100)"
+fi
+
+# 7. N2 · export de flux vers flowcol : sFlow avec hsflowd, IPFIX avec softflowd.
+if [ "${ENABLE_FLOW:-false}" = true ] && [ -n "${FLOW_IFACES:-}" ]; then
   {
     echo "sflow {"
     echo "  agent = eth0"
@@ -68,7 +77,7 @@ if [ "${ENABLE_FLOW:-false}" = true ]; then
     echo "}"
   } > /etc/hsflowd.conf
   hsflowd -d -f /etc/hsflowd.conf &
-  log "sFlow : 1/${SFLOW_N} sur ${FLOW_IFACES} -> ${FLOW_COLLECTOR}:6343"
+  log "N2 · sFlow : 1/${SFLOW_N} sur ${FLOW_IFACES} -> ${FLOW_COLLECTOR}:6343"
 
   # Une instance softflowd par interface ; maxlife=10 exporte chaque flux
   # au plus tard 10 s après son début, expint=1 vérifie le cache chaque seconde.
@@ -77,7 +86,20 @@ if [ "${ENABLE_FLOW:-false}" = true ]; then
       -t maxlife=10 -t expint=1 \
       -c "/run/softflowd-${dev}.ctl" -p "/run/softflowd-${dev}.pid" &
   done
-  log "IPFIX : ${FLOW_IFACES} -> ${FLOW_COLLECTOR}:4739"
+  log "N2 · IPFIX : ${FLOW_IFACES} -> ${FLOW_COLLECTOR}:4739"
+
+  # IPFIX sur UDP : le collecteur ne décode les flux qu'après avoir reçu le
+  # template de l'exporteur. softflowd ne le renvoie que tous les 16 paquets
+  # d'export, soit plusieurs minutes à faible trafic (J5 : scan perdu après un
+  # redémarrage de flowcol). On le redemande toutes les 10 s, comme le prévoit
+  # IPFIX sur UDP (RFC 7011).
+  while sleep 10; do
+    for dev in ${FLOW_IFACES}; do
+      softflowctl -c "/run/softflowd-${dev}.ctl" send-template > /dev/null || true
+    done
+  done &
+elif [ "${ENABLE_FLOW:-false}" = true ]; then
+  log "N2 · flux : aucune interface mesurée sur ce routeur (FLOW_IFACES vide)"
 fi
 
 log "prêt"

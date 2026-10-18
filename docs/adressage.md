@@ -50,14 +50,16 @@ Seuls les liens des agences sont limités, avec `tc` (variable `SHAPE` dans la t
 | h-iperf | serveur iperf3 (ports 5201 à 5204) | 10.9.2.12 · fd00:9:2::12 | 172.20.30.105 |
 | h-br1 | poste agence 1 | 10.9.3.10 · fd00:9:3::10 | 172.20.30.106 |
 | h-atk | générateur d'incidents (labo isolé) | 10.9.4.10 · fd00:9:4::10 | 172.20.30.107 |
-| goflow2 | collecteur sFlow (udp/6343) et IPFIX (udp/4739) | — | 172.20.30.50 |
-| snmp-exporter | traduit SNMP pour Prometheus (:9116) | — | 172.20.30.56 |
-| prom-snmp | Prometheus N1, SNMP toutes les 5 min (:9090, publié en localhost:9091) | — | 172.20.30.52 |
-| alertmanager | routage des alertes (:9093, publié en localhost:9093) | — | 172.20.30.54 |
-| alertsink | journal horodaté des alertes (:9095) | — | 172.20.30.57 |
-| grafana | tableaux de bord (:3000, publié en localhost:3000) | — | 172.20.30.55 |
+| snmp-exporter | N1 · traduit SNMP pour Prometheus (:9116) | — | 172.20.30.56 |
+| prom-snmp | N1 · Prometheus, SNMP toutes les 5 min (:9090, publié en localhost:9091) | — | 172.20.30.52 |
+| flowcol | N2 · reçoit sFlow (udp/6343) et IPFIX (udp/4739) ; métriques de flux (:9199) | — | 172.20.30.50 |
+| prom-flow | N2 · Prometheus, relevé toutes les secondes (:9090, publié en localhost:9090) | — | 172.20.30.53 |
+| alertmanager | commun · routage des alertes (:9093, publié en localhost:9093) | — | 172.20.30.54 |
+| alertsink | commun · heure d'arrivée et historique des alertes (:9095) | — | 172.20.30.57 |
+| alertdb | commun · base de l'historique des alertes, PostgreSQL (:5432) | — | 172.20.30.58 |
+| grafana | commun · tableaux de bord (:3000, publié en localhost:3000) | — | 172.20.30.55 |
 
-Réservés pour J5 : .51 flow2prom, .53 prom-flow.
+Chaque routeur expose aussi node_exporter (:9100) pour N2 et son agent SNMP (udp/161) pour N1.
 Entre conteneurs, on utilise les noms Docker (`clab-rt3p9-<nœud>`) plutôt que les adresses.
 
 ## Points de mesure des flux

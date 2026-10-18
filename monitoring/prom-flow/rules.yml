@@ -1,0 +1,45 @@
+# Règles d'alerte du niveau N2 : une règle par signature d'incident.
+#
+# Chaque règle s'appuie sur la source la plus adaptée :
+#   - débit : node_exporter (compteurs exacts, relevés toutes les secondes) ;
+#   - SYN et DNS : sFlow (quasi temps réel ; à ces débits, 1 paquet sur 512 suffit) ;
+#   - scan : IPFIX (un scan de 1000 paquets ne laisse qu'environ 2 échantillons sFlow).
+#
+# L'étiquette « detects » liste les scénarios qu'une règle peut révéler.
+# Le banc de mesure s'en sert pour savoir si une alerte est du bon type.
+# Seuils de départ, à régler au jalon J6 (L6.1).
+
+groups:
+  - name: n2-flux
+    rules:
+      - alert: LinkSaturation
+        # 80 % des liens d'agence (100 Mb/s), en moyenne sur 5 s
+        expr: rate(node_network_transmit_bytes_total{device=~"eth[1-9]"}[5s]) * 8 > 80e6
+        labels:
+          detects: saturation microburst
+        annotations:
+          summary: "{{ $labels.instance }} {{ $labels.device }} : plus de 80 Mb/s en moyenne sur 5 s"
+
+      - alert: PortScan
+        # une source vise plus de 50 ports différents par des SYN en 10 s
+        expr: max by (router, src_addr) (rt3_flow_syn_dst_ports{exporter="ipfix"}) > 50
+        labels:
+          detects: port_scan
+        annotations:
+          summary: "{{ $labels.src_addr }} vise plus de 50 ports en 10 s (vu par {{ $labels.router }})"
+
+      - alert: SynFlood
+        # plus de 1000 ouvertures de connexion TCP par seconde vues par un routeur
+        expr: sum by (router) (rate(rt3_flow_tcp_syn_total{exporter="sflow"}[5s])) > 1000
+        labels:
+          detects: syn_flood
+        annotations:
+          summary: "{{ $labels.router }} : plus de 1000 SYN/s"
+
+      - alert: DnsFlood
+        # plus de 200 requêtes DNS par seconde vues par un routeur
+        expr: sum by (router) (rate(rt3_flow_dns_queries_total{exporter="sflow"}[10s])) > 200
+        labels:
+          detects: dns_anomaly
+        annotations:
+          summary: "{{ $labels.router }} : plus de 200 requêtes DNS/s"
