@@ -17,8 +17,9 @@ Le trafic de fond tourne pendant toute la campagne, avec la même graine.
 Définitions et choix de mesure : docs/protocole-mesure.md
 
 Exemples :
-    python3 src/bench/campaign.py --level N1 --reps 10                        # campagne complète
-    python3 src/bench/campaign.py --level N1 --reps 1 --scenarios saturation  # essai à blanc
+    python3 src/bench/campaign.py --level N1                          # courte : 1 répétition par incident (~1 h)
+    python3 src/bench/campaign.py --level N1 --scenarios saturation   # un seul incident (~15 min)
+    python3 src/bench/campaign.py --level N1 --reps 10                # complète (8 à 11 h, machine dédiée)
 """
 
 import argparse
@@ -26,6 +27,7 @@ import csv
 import json
 import logging
 import random
+import signal
 import subprocess
 import sys
 import time
@@ -41,9 +43,11 @@ ALERTMANAGER = "http://localhost:9093"
 ALERTSINK = "clab-rt3p9-alertsink"
 
 # scrape_s : intervalle de sondage du niveau (la phase aléatoire est tirée dans [0, scrape_s])
-# grace_s  : délai après la fin de l'incident au-delà duquel on le déclare non détecté
+# grace_s  : délai après la fin de l'incident au-delà duquel on le déclare non détecté.
+#            N1 : l'effet d'un incident apparaît au premier relevé qui suit sa fin,
+#            donc 300 s de relevé + 30 s d'évaluation des règles + 30 s de marge.
 LEVELS = {
-    "N1": {"scrape_s": 300, "grace_s": 660},
+    "N1": {"scrape_s": 300, "grace_s": 360},
     "N2": {"scrape_s": 1, "grace_s": 60},
 }
 
@@ -154,10 +158,23 @@ def git_commit() -> str:
     return git("rev-parse", "--short", "HEAD") + ("-modifié" if git("status", "--porcelain") else "")
 
 
+def start_background(seed: int, log_path: Path) -> subprocess.Popen:
+    """Lance le trafic de fond (bgtraffic.py) ; son journal va dans log_path.
+
+    Un arrêt par « pkill » (SIGTERM) passe alors par les blocs finally de
+    l'appelant, qui arrêtent aussi le trafic de fond au lieu de le laisser tourner seul.
+    """
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit("arrêté (SIGTERM)"))
+    return subprocess.Popen(
+        [sys.executable, str(ROOT / "src/traffic/bgtraffic.py"), "--seed", str(seed)],
+        stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Banc de mesure du délai de détection.")
     parser.add_argument("--level", choices=LEVELS, required=True)
-    parser.add_argument("--reps", type=int, default=10, help="répétitions par incident (défaut : 10)")
+    parser.add_argument("--reps", type=int, default=1,
+                        help="répétitions par incident (défaut : 1 ; 10 pour les résultats de référence)")
     parser.add_argument("--scenarios", nargs="+", choices=SCENARIOS, default=list(SCENARIOS))
     parser.add_argument("--seed", type=int, default=42, help="graine (ordre, phases, trafic de fond)")
     parser.add_argument("--no-background", action="store_true", help="sans trafic de fond")
@@ -182,10 +199,7 @@ def main() -> None:
 
     background = None
     if not args.no_background:
-        bg_log = open(RESULTS / f"{campaign}-bgtraffic.log", "w")
-        background = subprocess.Popen(
-            [sys.executable, str(ROOT / "src/traffic/bgtraffic.py"), "--seed", str(args.seed)],
-            stdout=bg_log, stderr=subprocess.STDOUT)
+        background = start_background(args.seed, RESULTS / f"{campaign}-bgtraffic.log")
 
     log.info("campagne %s : %d répétitions -> %s", campaign, len(plan), csv_path.relative_to(ROOT))
     try:

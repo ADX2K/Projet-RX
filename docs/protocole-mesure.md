@@ -28,7 +28,10 @@ change, on le note ici avec la date.
   `detects` (voir `monitoring/prom-snmp/rules.yml`).
 - **Détecté** : la première alerte du bon type et du bon niveau (`level`)
   arrive entre `t_start` et `t_end` + fenêtre de grâce.
-  Fenêtre de grâce : N1 = 660 s (deux relevés SNMP + 60 s) ; N2 = 60 s.
+  Fenêtre de grâce : N1 = 360 s ; N2 = 60 s. En N1, l'effet d'un incident
+  apparaît au premier relevé SNMP qui suit sa fin (≤ 300 s), puis les règles
+  sont évaluées toutes les 30 s : 300 + 30 + 30 s de marge.
+  (Modifié le 2026-10-18 : 660 s auparavant, deux relevés, ce qui était trop prudent.)
 - **Autre alerte (`other_alerts`)** : alerte du même niveau, d'un autre type,
   reçue entre `t_start` et la détection (ou la fin de la fenêtre). Ce n'est
   pas un faux positif : elle est le plus souvent causée par l'incident lui-même.
@@ -54,12 +57,50 @@ change, on le note ici avec la date.
 
 Règles communes :
 
-- 10 répétitions par incident ; on rapporte la médiane et le min–max.
+- Résultats de référence : 10 répétitions par incident, médiane et min–max.
+  Par défaut, `make campaign` est une campagne courte (1 répétition par
+  incident, environ 1 h) pour vérifier ou illustrer : ses chiffres sont
+  indicatifs. La complète (`REPS=10`) se lance seulement si besoin, sur une
+  machine dédiée.
 - Ordre des répétitions tiré au hasard, avec une graine notée (rejouable).
 - Trafic de fond pendant toute la campagne, avec la même graine.
 - Chaque campagne écrit aussi un manifeste `.json` (paramètres, commit Git)
   et le journal du trafic de fond.
 - On garde et on rapporte les résultats négatifs.
+
+## Session de trafic normal (fausses alertes)
+
+`src/bench/normal.py` (`make normal LEVEL=N1 HOURS=3`) fait tourner le trafic
+de fond seul, sans aucun incident, pendant plusieurs heures. Toute alerte du
+niveau reçue pendant ce temps est une fausse alerte.
+
+- Même préparation que le banc : un cycle de sondage + 60 s, puis aucune alerte active.
+- Chaque alerte n'est comptée qu'une fois, même si Alertmanager la renvoie
+  (`repeat_interval` de 4 h) : elle est identifiée par ses étiquettes et son heure de début.
+- Résultat : nombre de fausses alertes et taux par heure (`.json`), détail des
+  alertes (`.csv`).
+- Durée : 1 h par défaut ; 3 h pour les résultats de référence.
+
+## Synthèse des résultats
+
+`src/analysis/summarize.py` (`make summary`) lit les CSV de campagne (un ou
+plusieurs, si la campagne a été découpée) et les sessions de trafic normal,
+puis écrit `results/<nom>/summary.md` avec une copie des fichiers bruts.
+`results/raw/` est un brouillon hors Git ; `results/<nom>/` contient les
+résultats de référence, versionnés, cités dans le rapport.
+
+## Conditions d'une campagne longue
+
+- Sur une machine dédiée pendant toute la durée (PC d'un membre volontaire ou
+  machine de l'école), pas sur un poste personnel utilisé au quotidien.
+- Machine sur secteur et sans mise en veille : la veille gèle WSL et
+  fausse les délais mesurés. C'est au propriétaire de la machine de le régler.
+- Ne pas toucher au labo pendant la campagne (pas de `make up`, d'incident ou de test).
+- Lancer la campagne détachée du terminal, pour qu'elle survive à la fermeture
+  de VS Code :
+  `setsid nohup make campaign LEVEL=N1 REPS=10 > results/raw/campagne.out 2>&1 &`
+- Suivre l'avancement : `tail -f results/raw/campagne.out`.
+  Arrêter : `pkill -f src/bench/campaign.py` (les lignes déjà écrites sont gardées).
 
 ## Incidents
 
@@ -114,8 +155,11 @@ distinguer un scan, un SYN flood et une anomalie DNS : une seule règle
   SYN-ACK et le noyau de h-atk renvoie des RST : ce n'est pas un flood à
   adresses usurpées.
 - La durée du scan dépend de nmap (quelques secondes) : `t_end` la mesure.
-- Une répétition N1 dure 14 à 20 minutes (essais à blanc du 2026-10-18) :
-  phase aléatoire, fenêtre de grâce de 11 min si rien n'est détecté, retour au
-  calme après une saturation. Une campagne complète (5 incidents × 10
-  répétitions) dure donc 12 à 16 heures. On peut la découper en plusieurs
-  nuits avec `--scenarios` (ex. `--scenarios saturation microburst`).
+- Une répétition N1 dure environ 9 à 15 minutes : phase aléatoire (2,5 min en
+  moyenne), fenêtre de grâce de 6 min si rien n'est détecté, retour au calme
+  après une saturation. Durées totales : campagne courte (1 répétition par
+  incident) environ 1 h ; un seul incident (`make campaign S=saturation`)
+  environ 15 min ; campagne complète (10 répétitions) 8 à 11 h, découpable
+  avec `S=` puisque la synthèse fusionne plusieurs CSV.
+- Pour une démo, `make inject S=<incident>` suffit : il lance un incident et
+  indique où regarder les alertes.

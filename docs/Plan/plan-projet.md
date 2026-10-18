@@ -15,6 +15,14 @@
 > - Grafana : image `grafana/grafana` (l'image `grafana-oss` n'est plus publiée).
 > - SYN flood mesuré à ≈ 3800 SYN/s (hping3 n'atteint pas les 5000/s visés).
 > - Seuil N1 `HighPacketRate` = 1300 paquets/s, calibré sur le trafic de fond (`make calibrate`).
+>
+> **Écarts décidés au jalon J4** :
+> - Le projet ne tourne pas des heures sur le poste d'Adel : les démos passent par `make inject`.
+>   `make campaign` est par défaut une campagne courte (1 répétition par incident, environ 1 h) ;
+>   la campagne de référence à 10 répétitions (L4.1, 8 à 11 h) se lance seulement si besoin, sur une machine dédiée.
+> - Fenêtre de grâce N1 réduite de 660 à 360 s (l'effet d'un incident apparaît au premier relevé SNMP qui suit sa fin).
+> - Les « autres alertes » causées par l'incident ne sont plus comptées comme fausses alertes ; les fausses alertes
+>   se mesurent en trafic normal seul (`make normal`, 1 h par défaut, 3 h pour la référence).
 
 ## 0. En bref
 

@@ -2,13 +2,16 @@
 LAB  := lab/topology.clab.yml
 CLAB := containerlab
 
-# Paramètres modifiables :  make inject S=syn_flood   make campaign LEVEL=N1 REPS=10
+# Paramètres modifiables :  make inject S=syn_flood   make campaign S=saturation   make campaign REPS=10
 S     ?=
 LEVEL ?= N1
-REPS  ?= 10
+REPS  ?= 1
+HOURS ?= 1
+NAME  ?=
+FILES ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help images up down check traffic flows alerts inject campaign calibrate test
+.PHONY: help images up down check traffic flows alerts inject campaign normal calibrate summary test
 
 help: ## Liste les cibles disponibles
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -38,12 +41,19 @@ alerts: ## Affiche les alertes reçues par alertsink (Ctrl+C pour arrêter)
 inject: ## Lance un incident : make inject S=<nom> (sans S : liste des incidents)
 	python3 src/bench/scenarios.py $(S)
 
-campaign: ## Campagne de mesure : make campaign LEVEL=N1 REPS=10
-	python3 src/bench/campaign.py --level $(LEVEL) --reps $(REPS)
+campaign: ## Campagne courte (1 répétition par incident) ; S=<incident> pour un seul, REPS=10 pour la complète
+	python3 src/bench/campaign.py --level $(LEVEL) --reps $(REPS) $(if $(S),--scenarios $(S))
+
+normal: ## Trafic normal seul, compte les fausses alertes (1 h ; HOURS=3 pour la référence)
+	python3 src/bench/normal.py --level $(LEVEL) --hours $(HOURS)
 
 calibrate: ## Mesure les paquets/s du trafic normal (seuils N1, 10 min)
 	python3 src/bench/calibrate.py
 
-test: ## Tests unitaires (flow2prom, banc de mesure)
+summary: ## Tableau de résultats : make summary NAME=<dossier> FILES="<csv/json de results/raw>"
+	python3 src/analysis/summarize.py --name $(NAME) $(FILES)
+
+test: ## Tests unitaires (flow2prom, banc de mesure, synthèse)
 	cd src/flow2prom && python3 -m unittest
 	cd src/bench && python3 -m unittest
+	cd src/analysis && python3 -m unittest

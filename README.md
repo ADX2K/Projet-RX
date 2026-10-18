@@ -33,8 +33,12 @@ make check     # vérifie réseau, services, flux et supervision
 make traffic   # trafic de fond (Ctrl+C pour arrêter)
 make flows     # affiche les flux reçus par goflow2
 make alerts    # affiche les alertes reçues par alertsink
-make inject S=syn_flood         # lance un incident (make inject seul : liste)
-make campaign LEVEL=N1 REPS=10  # campagne de mesure, résultats dans results/raw/
+make inject S=syn_flood         # démo : lance un incident (make inject seul : liste)
+make campaign                   # campagne courte : 1 répétition par incident (~1 h)
+make campaign S=saturation      # un seul incident (~15 min) ; REPS=10 : complète (8 à 11 h)
+make normal                     # 1 h de trafic normal seul : fausses alertes
+make calibrate                  # niveau du trafic normal, pour fixer les seuils
+make summary NAME=J4-baseline-snmp FILES="results/raw/…csv results/raw/…json"
 make test      # tests unitaires
 make down      # détruit le labo
 ```
@@ -69,8 +73,10 @@ src/traffic/        trafic de fond
 src/bench/          incidents (scenarios.py) et banc de mesure (campaign.py)
 src/alertsink/      récepteur d'alertes horodaté
 src/flow2prom/      conversion des flux goflow2 en métriques (J5) et ses tests
+src/analysis/       synthèse des mesures (summarize.py)
 docs/               plan, adressage, protocole de mesure, décisions
-results/raw/        résultats des campagnes (hors Git)
+results/raw/        brouillon : sorties brutes des campagnes (hors Git)
+results/<nom>/      résultats de référence versionnés (summary.md + données brutes)
 ```
 
 Un nœud se règle à un seul endroit : sa section dans `lab/topology.clab.yml`

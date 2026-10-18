@@ -5,16 +5,16 @@ Chaque incident est une commande lancée dans un conteneur du labo avec
 `docker exec`. inject() la lance, attend sa fin et renvoie la vérité terrain :
 heure de début et de fin en nanosecondes (horloge commune à tous les conteneurs).
 
-Lancer un incident à la main :
+Lancer un incident à la main (démo) :
     python3 src/bench/scenarios.py --list
     python3 src/bench/scenarios.py saturation
 """
 
 import argparse
-import json
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 LAB = "rt3p9"
@@ -93,7 +93,16 @@ def main() -> None:
         for name, scenario in SCENARIOS.items():
             print(f"{name:12} {scenario.host:6} -> {scenario.target:10} {scenario.description}")
         return
-    print(json.dumps(inject(args.scenario)))
+
+    def clock(ns: int) -> str:
+        return datetime.fromtimestamp(ns / 1e9).strftime("%H:%M:%S")
+
+    print(f"{args.scenario} : {SCENARIOS[args.scenario].description}")
+    print(f"  début {datetime.now():%H:%M:%S}…", flush=True)
+    event = inject(args.scenario)
+    print(f"  fin   {clock(event['t_end_ns'])} ({event['duration_s']} s)")
+    print("Alertes : make alerts, ou Grafana http://localhost:3000. "
+          "En N1, elles arrivent au relevé SNMP suivant, jusqu'à 5 min après la fin.")
 
 
 if __name__ == "__main__":
